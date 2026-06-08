@@ -6,7 +6,6 @@ def get_secret(name: str, default: str = "") -> str:
     value = os.getenv(name)
     if value:
         return value.strip()
-
     try:
         import streamlit as st
         value = st.secrets.get(name, default)
@@ -20,14 +19,12 @@ def get_secret(name: str, default: str = "") -> str:
 def parse_board_urls(raw: str) -> List[str]:
     if not raw:
         return []
-
-    parts = []
+    urls = []
     for line in raw.replace(",", "\n").splitlines():
         line = line.strip()
         if line:
-            parts.append(line)
-
-    return parts
+            urls.append(line)
+    return urls
 
 
 def get_board_urls() -> List[str]:
@@ -41,15 +38,7 @@ def get_telegram_token() -> str:
 def get_telegram_chat_id() -> str:
     return get_secret("TELEGRAM_CHAT_ID")
 
-
-# 기존 코드 호환용 별칭
-def board_urls() -> List[str]:
-    return get_board_urls()
-
-
-def telegram_bot_token() -> str:
-    return get_telegram_token()
-
-
-def telegram_chat_id() -> str:
-    return get_telegram_chat_id()
+# aliases for older code
+board_urls = get_board_urls
+telegram_bot_token = get_telegram_token
+telegram_chat_id = get_telegram_chat_id

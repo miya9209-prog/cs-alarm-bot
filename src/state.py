@@ -1,28 +1,38 @@
-from __future__ import annotations
 import json
 from pathlib import Path
+from typing import Iterable, List
 
-STATE_FILE = Path("state.json")
-
-
-def state_exists() -> bool:
-    return STATE_FILE.exists()
+STATE_PATH = Path("state.json")
 
 
-def load_seen() -> set[str]:
-    if not STATE_FILE.exists():
-        return set()
+def load_seen() -> List[str]:
+    if not STATE_PATH.exists():
+        return []
     try:
-        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-        return set(data.get("seen", []))
+        data = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return list(data.get("seen", []))
+        if isinstance(data, list):
+            return list(data)
     except Exception:
-        return set()
+        return []
+    return []
 
 
-def save_seen(seen: set[str]) -> None:
-    STATE_FILE.write_text(json.dumps({"seen": sorted(seen)}, ensure_ascii=False, indent=2), encoding="utf-8")
+def save_seen(keys: Iterable[str]) -> None:
+    unique = []
+    seen = set()
+    for key in keys:
+        if key and key not in seen:
+            unique.append(key)
+            seen.add(key)
+    STATE_PATH.write_text(json.dumps({"seen": unique}, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def reset_seen() -> None:
-    if STATE_FILE.exists():
-        STATE_FILE.unlink()
+    if STATE_PATH.exists():
+        STATE_PATH.unlink()
+
+
+def state_exists() -> bool:
+    return STATE_PATH.exists()
