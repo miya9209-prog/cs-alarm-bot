@@ -13,6 +13,7 @@ class BoardPost:
     board_url: str
     title: str
     link: str
+    url: str
     unique_id: str
 
 
@@ -24,16 +25,20 @@ def _make_id(title: str, link: str) -> str:
 def _get_board_name(board_url: str) -> str:
     if "board_no=4" in board_url:
         return "포토후기"
-    if "board_no=6" in board_url:
+    elif "board_no=6" in board_url:
         return "상품문의"
-    if "board_no=39" in board_url:
+    elif "board_no=39" in board_url:
         return "갤러리"
     return "게시판"
 
 
 def fetch_board_posts(board_url: str, limit: int = 20) -> List[BoardPost]:
     headers = {
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0 Safari/537.36"
+        ),
         "Accept-Language": "ko-KR,ko;q=0.9",
     }
 
@@ -42,38 +47,64 @@ def fetch_board_posts(board_url: str, limit: int = 20) -> List[BoardPost]:
     response.encoding = response.apparent_encoding
 
     soup = BeautifulSoup(response.text, "html.parser")
-    posts: List[BoardPost] = []
+
+    posts = []
     seen = set()
+
     board_name = _get_board_name(board_url)
 
-    links = soup.select('a[href*="/board/"], a[href*="read.html"], a[href*="no="]')
+    links = soup.select(
+        'a[href*="read.html"], '
+        'a[href*="/board/"], '
+        'a[href*="no="]'
+    )
+
+    skip_words = [
+        "로그인",
+        "회원가입",
+        "장바구니",
+        "검색",
+        "목록",
+        "쓰기",
+        "수정",
+        "삭제",
+        "답변",
+        "이전",
+        "다음",
+    ]
 
     for a in links:
         title = a.get_text(" ", strip=True)
         href = a.get("href", "").strip()
 
-        if not title or not href or len(title) < 2:
+        if not title:
             continue
 
-        if title in ["로그인", "회원가입", "장바구니", "검색", "목록", "쓰기", "수정", "삭제", "답변", "이전", "다음"]:
+        if title in skip_words:
+            continue
+
+        if len(title) < 2:
+            continue
+
+        if not href:
             continue
 
         full_link = urljoin(board_url, href)
 
-        if "read.html" not in full_link and "no=" not in full_link:
-            continue
-
         key = f"{title}|{full_link}"
+
         if key in seen:
             continue
 
         seen.add(key)
+
         posts.append(
             BoardPost(
                 board_name=board_name,
                 board_url=board_url,
                 title=title,
                 link=full_link,
+                url=full_link,
                 unique_id=_make_id(title, full_link),
             )
         )
@@ -84,13 +115,18 @@ def fetch_board_posts(board_url: str, limit: int = 20) -> List[BoardPost]:
     return posts
 
 
-def fetch_all_boards(board_urls: List[str], limit_per_board: int = 20) -> List[BoardPost]:
-    all_posts: List[BoardPost] = []
+def fetch_all_boards(board_urls: List[str], limit_per_board: int = 10):
+    all_posts = []
 
     for board_url in board_urls:
         try:
-            all_posts.extend(fetch_board_posts(board_url, limit=limit_per_board))
+            posts = fetch_board_posts(
+                board_url,
+                limit=limit_per_board,
+            )
+            all_posts.extend(posts)
+
         except Exception as e:
-            print(f"[ERROR] {board_url} / {e}")
+            print(f"[ERROR] {board_url} : {e}")
 
     return all_posts
