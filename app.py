@@ -1,61 +1,63 @@
-import streamlit as st
-import pandas as pd
-from datetime import datetime
+from dataclasses import dataclass
+from typing import List
+from urllib.parse import urljoin
+import hashlib
+import requests
+from bs4 import BeautifulSoup
 
-from src.check_new_posts import collect_posts, run_check, format_message
-from src.telegram_notify import send_telegram_message
-from src.config import BOARD_URLS, TELEGRAM_CHAT_ID
 
-st.set_page_config(page_title="미샵 CS 새글 알림", page_icon="🔔", layout="wide")
+@dataclass
+class BoardPost:
+    post_id: str
+    board_name: str
+    title: str
+    author: str
+    created_at: str
+    url: str
 
-st.title("🔔 미샵 CS 게시판 새글 알림")
-st.caption("카페24 CS 게시판 새글을 확인하고 텔레그램으로 알림을 보내는 관리 화면입니다.")
 
-with st.sidebar:
-    st.header("설정 확인")
-    st.write("등록된 게시판 수:", len(BOARD_URLS))
-    st.write("텔레그램 채팅방:", "등록됨" if TELEGRAM_CHAT_ID else "미등록")
-    st.caption("실제 값은 Streamlit Secrets 또는 GitHub Secrets에 저장합니다.")
+def _text(el) -> str:
+    return el.get_text(" ", strip=True) if el else ""
 
-col1, col2, col3 = st.columns(3)
 
-with col1:
-    if st.button("현재 게시판 글 확인", use_container_width=True):
-        with st.spinner("게시판을 확인하는 중입니다..."):
-            posts = collect_posts()
-        st.session_state["posts"] = posts
-        st.success(f"최근 글 {len(posts)}건을 확인했습니다.")
+def fetch_posts_from_board_page(board_url: str, limit: int = 20) -> List[BoardPost]:
+    """
+    카페24 게시판 목록 페이지를 읽어 새글 후보를 가져옵니다.
+    쇼핑몰 스킨마다 HTML 구조가 다르므로, 실제 미샵 게시판 구조에 맞춰 selector 조정이 필요할 수 있습니다.
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; MisharpCSAlertBot/1.0)",
+    }
+    r = requests.get(board_url, headers=headers, timeout=20)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "html.parser")
 
-with col2:
-    if st.button("새글 확인 후 알림 발송", use_container_width=True):
-        with st.spinner("새글을 확인하고 알림을 보내는 중입니다..."):
-            new_posts = run_check(send_alert=True)
-        st.session_state["new_posts"] = new_posts
-        st.success(f"새글 {len(new_posts)}건 처리 완료")
+    board_name = _text(soup.select_one("h2, .title h2, .board_title, .path ol li:last-child")) or "CS 게시판"
+    rows = soup.select("table tbody tr")
+    posts: List[BoardPost] = []
 
-with col3:
-    if st.button("텔레그램 테스트 발송", use_container_width=True):
-        try:
-            send_telegram_message(f"✅ 미샵 CS 알림봇 테스트 성공\n시간 : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            st.success("테스트 메시지를 발송했습니다.")
-        except Exception as e:
-            st.error(f"발송 실패: {e}")
+    for row in rows:
+        link = row.select_one("a[href*='read.html'], a[href*='article'], a[href]")
+        title = _text(link)
+        if not link or not title or "공지" in title:
+            continue
 
-st.divider()
+        href = link.get("href", "")
+        full_url = urljoin(board_url, href)
+        cells = [_text(td) for td in row.select("td")]
+        author = cells[2] if len(cells) >= 3 else ""
+        created_at = cells[3] if len(cells) >= 4 else ""
+        raw_id = full_url or f"{board_url}|{title}|{author}|{created_at}"
+        post_id = hashlib.sha256(raw_id.encode("utf-8")).hexdigest()[:24]
 
-posts = st.session_state.get("posts", [])
-new_posts = st.session_state.get("new_posts", [])
-
-if new_posts:
-    st.subheader("방금 감지된 새글")
-    for p in new_posts:
-        with st.expander(f"{p.board_name} / {p.title}", expanded=True):
-            st.text(format_message(p).replace("<b>", "").replace("</b>", ""))
-            st.link_button("게시글 바로가기", p.url)
-
-if posts:
-    st.subheader("최근 게시글 목록")
-    df = pd.DataFrame([p.__dict__ for p in posts])
-    st.dataframe(df[["board_name", "title", "author", "created_at", "url"]], use_container_width=True, hide_index=True)
-else:
-    st.info("왼쪽 버튼을 눌러 게시판 글을 확인하세요.")
+        posts.append(BoardPost(
+            post_id=post_id,
+            board_name=board_name,
+            title=title,
+            author=author,
+            created_at=created_at,
+            url=full_url,
+        ))
+        if len(posts) >= limit:
+            break
+    return posts
