@@ -1,4 +1,0 @@
-TELEGRAM_BOT_TOKEN = "123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-TELEGRAM_CHAT_ID = "-1001234567890"
-BOARD_URLS = "https://misharp.co.kr/board/product/list.html?board_no=6,https://misharp.co.kr/board/free/list.html?board_no=5"
-CHECK_LIMIT = "20"
