@@ -6,6 +6,20 @@ from src.state import load_seen, save_seen, reset_seen
 from src.telegram_alert import send_telegram_message
 
 
+def post_key(post) -> str:
+    if hasattr(post, "key"):
+        return str(post.key)
+    if hasattr(post, "unique_id"):
+        return str(post.unique_id)
+    title = getattr(post, "title", "")
+    url = getattr(post, "url", getattr(post, "link", ""))
+    return f"{title}|{url}"
+
+
+def post_url(post) -> str:
+    return getattr(post, "url", getattr(post, "link", ""))
+
+
 def get_current_posts() -> List[BoardPost]:
     board_urls = get_board_urls()
     return fetch_all_boards(board_urls, limit_per_board=10)
@@ -13,7 +27,11 @@ def get_current_posts() -> List[BoardPost]:
 
 def initialize_current_posts() -> Dict[str, int]:
     posts = get_current_posts()
-    seen_keys = [p.key for p in posts if not p.title.startswith("[오류]")]
+    seen_keys = [
+        post_key(p)
+        for p in posts
+        if not getattr(p, "title", "").startswith("[오류]")
+    ]
     save_seen(seen_keys)
 
     return {
@@ -33,7 +51,10 @@ def check_new_posts(send_alert: bool = True) -> Dict[str, object]:
 
     new_posts = []
     for post in posts:
-        if post.key not in seen and not post.title.startswith("[오류]"):
+        key = post_key(post)
+        title = getattr(post, "title", "")
+
+        if key not in seen and not title.startswith("[오류]"):
             new_posts.append(post)
 
     if send_alert and new_posts:
@@ -43,13 +64,17 @@ def check_new_posts(send_alert: bool = True) -> Dict[str, object]:
         for post in reversed(new_posts):
             message = (
                 f"🔔 미샵 CS 새글 알림\n\n"
-                f"게시판: {post.board_name}\n"
-                f"제목: {post.title}\n"
-                f"링크: {post.url}"
+                f"게시판: {getattr(post, 'board_name', '게시판')}\n"
+                f"제목: {getattr(post, 'title', '')}\n"
+                f"링크: {post_url(post)}"
             )
             send_telegram_message(token, chat_id, message)
 
-    all_keys = [p.key for p in posts if not p.title.startswith("[오류]")]
+    all_keys = [
+        post_key(p)
+        for p in posts
+        if not getattr(p, "title", "").startswith("[오류]")
+    ]
     save_seen(all_keys)
 
     return {
