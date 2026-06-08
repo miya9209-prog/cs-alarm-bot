@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from .config import board_urls, telegram_bot_token, telegram_chat_id
 from .cafe24_board import fetch_all_boards, BoardPost
 from .telegram_alert import send_telegram_message
-from .state import load_seen, save_seen
+from .state import load_seen, save_seen, state_exists
 
 KST = timezone(timedelta(hours=9))
 
@@ -24,32 +24,48 @@ def format_post_message(post: BoardPost) -> str:
     return "\n".join(parts)
 
 
-def run_monitor(send_alerts: bool = True, initialize_only: bool = False) -> dict:
+def initialize_current_posts() -> dict:
+    urls = board_urls()
+    if not urls:
+        return {"ok": False, "message": "BOARD_URLS가 비어 있습니다.", "new_count": 0, "posts": []}
+    posts = fetch_all_boards(urls, limit_per_board=10)
+    save_seen({p.key for p in posts if not p.title.startswith("[오류]")})
+    return {"ok": True, "message": "현재 게시글을 기준값으로 저장했습니다. 이제 이후 새글부터 알림이 갑니다.", "new_count": 0, "posts": posts}
+
+
+def run_monitor(send_alerts: bool = True, initialize_only: bool = False, first_run_send_current: bool = False) -> dict:
     urls = board_urls()
     if not urls:
         return {"ok": False, "message": "BOARD_URLS가 비어 있습니다.", "new_count": 0, "posts": []}
 
     posts = fetch_all_boards(urls, limit_per_board=10)
-    seen = load_seen()
-
-    if not seen:
-        # First run: save current posts so old posts are not all sent as new.
-        save_seen({p.key for p in posts})
-        return {
-            "ok": True,
-            "message": "초기 실행입니다. 현재 게시글을 기준값으로 저장했습니다. 다음 새글부터 알림을 보냅니다.",
-            "new_count": 0,
-            "posts": posts,
-        }
-
-    new_posts = [p for p in posts if p.key not in seen and not p.title.startswith("[오류]")]
-    sent = []
-    errors = []
+    current_keys = {p.key for p in posts if not p.title.startswith("[오류]")}
 
     if initialize_only:
-        seen.update(p.key for p in posts)
-        save_seen(seen)
-        return {"ok": True, "message": "현재 게시글을 기준값으로 저장했습니다.", "new_count": 0, "posts": posts}
+        save_seen(current_keys)
+        return {"ok": True, "message": "현재 게시글을 기준값으로 저장했습니다. 이제 이후 새글부터 알림이 갑니다.", "new_count": 0, "posts": posts}
+
+    seen = load_seen()
+    first_run = not state_exists() or not seen
+
+    if first_run and not first_run_send_current:
+        # GitHub Actions first run: prevent old posts from flooding Telegram.
+        save_seen(current_keys)
+        return {
+            "ok": True,
+            "message": "첫 실행이라 현재 게시글을 기준값으로 저장했습니다. 다음 새글부터 알림을 보냅니다.",
+            "new_count": 0,
+            "posts": posts,
+            "new_posts": [],
+        }
+
+    if first_run and first_run_send_current:
+        new_posts = [p for p in posts if not p.title.startswith("[오류]")]
+    else:
+        new_posts = [p for p in posts if p.key not in seen and not p.title.startswith("[오류]")]
+
+    sent = []
+    errors = []
 
     if send_alerts:
         token = telegram_bot_token()
@@ -61,7 +77,7 @@ def run_monitor(send_alerts: bool = True, initialize_only: bool = False) -> dict
             else:
                 errors.append(msg)
 
-    seen.update(p.key for p in posts)
+    seen.update(current_keys)
     save_seen(seen)
 
     return {
@@ -75,6 +91,8 @@ def run_monitor(send_alerts: bool = True, initialize_only: bool = False) -> dict
 
 
 if __name__ == "__main__":
-    result = run_monitor(send_alerts=True)
+    # GitHub Actions uses safe mode: first run saves baseline only.
+    result = run_monitor(send_alerts=True, first_run_send_current=False)
     print(result["message"])
     print(f"new_count={result.get('new_count', 0)}")
+    print(f"sent_count={result.get('sent_count', 0)}")
