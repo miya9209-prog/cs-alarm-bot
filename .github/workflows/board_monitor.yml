@@ -15,8 +15,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -25,14 +23,11 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
-        - name: Install Playwright Browser
+
+      - name: Install Playwright Browser
         run: python -m playwright install chromium
 
       - name: Run board monitor
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          BOARD_URLS: ${{ secrets.BOARD_URLS }}
         run: python -m src.monitor
 
       - name: Commit updated state
@@ -40,5 +35,5 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add state.json
-          git diff --cached --quiet || git commit -m "Update board monitor state"
+          git commit -m "Update board monitor state" || echo "No changes"
           git push
