@@ -1,3 +1,4 @@
+```python
 import hashlib
 import re
 from typing import List
@@ -39,11 +40,6 @@ def _error_post(review_url: str, error: Exception) -> List[BoardPost]:
 
 
 def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
-    """Fetch visible CREMA reviews from the rendered review page.
-
-    CREMA renders reviews with JavaScript, so this function uses Playwright's
-    headless Chromium instead of a plain requests HTML fetch.
-    """
     if not review_url:
         return []
 
@@ -51,107 +47,168 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-blink-features=AutomationControlled",
+                ],
+            )
+
             page = browser.new_page(
-                viewport={"width": 1280, "height": 1600},
+                viewport={"width": 1440, "height": 2200},
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
                 ),
                 locale="ko-KR",
             )
-            page.goto(review_url, wait_until="domcontentloaded", timeout=60000)
-            # CREMA renders after JS and often after the review area is reached.
-            # Scroll several times so the widget/list is actually mounted.
-            page.wait_for_timeout(3000)
-            for y in [800, 1600, 2400, 3200, 4200, 5200]:
+
+            page.goto(review_url, wait_until="networkidle", timeout=90000)
+
+            page.wait_for_timeout(8000)
+
+            for y in [500, 1000, 1600, 2200, 3000, 4000, 5200, 6500, 8000]:
                 page.evaluate("(y) => window.scrollTo(0, y)", y)
-                page.wait_for_timeout(1200)
-                if page.locator(".AppReviewInfoSectionListV3__message").count() > 0:
-                    break
-            page.wait_for_selector(".AppReviewInfoSectionListV3__message", timeout=45000)
+                page.wait_for_timeout(1500)
+
+            body_text = page.locator("body").inner_text(timeout=30000)
+
+            print(
+                "CREMA_BODY_TEXT_SAMPLE",
+                body_text[:1000].replace("\n", " / ")
+            )
 
             reviews = page.evaluate(
                 """
                 (limit) => {
-                  function text(el) {
-                    return (el && el.innerText ? el.innerText : '').replace(/\s+/g, ' ').trim();
+                  function clean(t) {
+                    return (t || '').replace(/\\s+/g, ' ').trim();
                   }
-                  function closestReview(el) {
-                    let cur = el;
-                    for (let i = 0; i < 12 && cur; i++, cur = cur.parentElement) {
-                      const hasProduct = cur.querySelector('[class*="AppProductInfoSection"]');
-                      const hasUser = cur.querySelector('[class*="AppReviewUserInfoSection"]');
-                      const hasMessage = cur.querySelector('.AppReviewInfoSectionListV3__message');
-                      if (hasMessage && (hasProduct || hasUser)) return cur;
-                    }
-                    return el.closest('[class*="Body__review"], [class*="Review"], li, article, section, div');
-                  }
-                  function productText(card) {
-                    const selectors = [
-                      '[class*="AppProductInfoSectionV2__name"]',
-                      '[class*="AppProductInfoSection__name"]',
-                      '[class*="ProductInfoSection"]'
-                    ];
-                    for (const s of selectors) {
-                      const el = card && card.querySelector(s);
-                      const t = text(el);
-                      if (t) return t.replace(/리뷰\s*\d+.*$/, '').replace(/NEW$/, '').trim();
-                    }
-                    return '';
-                  }
-                  function authorText(card) {
-                    const selectors = [
-                      '[class*="AppReviewUserInfoSectionListV3"]',
-                      '[class*="AppReviewUserInfoSection"]',
-                      '[class*="UserInfoSection"]'
-                    ];
-                    for (const s of selectors) {
-                      const el = card && card.querySelector(s);
-                      const t = text(el);
-                      if (t) return t;
-                    }
-                    return '';
-                  }
-                  function ratingText(card) {
-                    if (!card) return '';
-                    const rate = card.querySelector('[class*="AppRate"], [class*="Rate"], [aria-label*="점"], [title*="점"]');
-                    if (!rate) return '';
-                    return rate.getAttribute('aria-label') || rate.getAttribute('title') || text(rate) || '';
-                  }
+
+                  const rows = Array.from(
+                    document.querySelectorAll('div, li, article, section')
+                  );
+
                   const out = [];
                   const seen = new Set();
-                  const messages = Array.from(document.querySelectorAll('.AppReviewInfoSectionListV3__message'));
-                  for (const msg of messages) {
-                    const message = text(msg);
-                    if (!message || seen.has(message)) continue;
-                    seen.add(message);
-                    const card = closestReview(msg);
+
+                  for (const row of rows) {
+
+                    const txt = clean(row.innerText);
+
+                    if (!txt) continue;
+
+                    const hasReviewWord = txt.includes('리뷰');
+                    const hasReport = txt.includes('신고 및 차단');
+                    const hasStar =
+                      txt.includes('★★★★★') ||
+                      txt.includes('★★★★') ||
+                      txt.includes('별점');
+
+                    const hasOption =
+                      txt.includes('상품 옵션');
+
+                    if (!(hasReviewWord || hasReport || hasStar || hasOption))
+                      continue;
+
+                    if (txt.length < 15 || txt.length > 800)
+                      continue;
+
+                    let product = '';
+                    let author = '';
+                    let message = '';
+
+                    const lines = txt
+                      .split('\\n')
+                      .map(v => clean(v))
+                      .filter(Boolean);
+
+                    for (const line of lines) {
+                      if (!product && line.includes('리뷰')) {
+                        product = line
+                          .replace(/리뷰\\s*\\d+.*/, '')
+                          .trim();
+                      }
+                    }
+
+                    for (const line of lines) {
+                      if (
+                        !author &&
+                        /^[가-힣A-Za-z0-9*]{2,12}$/.test(line) &&
+                        !line.includes('리뷰')
+                      ) {
+                        author = line;
+                      }
+                    }
+
+                    const ignore = [
+                      'NEW',
+                      '신고 및 차단',
+                      '댓글',
+                      '리뷰 더보기',
+                    ];
+
+                    const candidates = lines.filter(line =>
+                      line.length >= 8 &&
+                      !ignore.some(x => line.includes(x)) &&
+                      !line.includes('상품 옵션') &&
+                      !line.includes('평소사이즈') &&
+                      !line.includes('몸무게') &&
+                      !line.includes('키 ')
+                    );
+
+                    message =
+                      candidates[candidates.length - 1] || '';
+
+                    const uniq =
+                      clean(product + '|' + author + '|' + message);
+
+                    if (!message) continue;
+                    if (seen.has(uniq)) continue;
+
+                    seen.add(uniq);
+
                     out.push({
-                      product: productText(card),
-                      author: authorText(card),
-                      rating: ratingText(card),
-                      message: message,
+                      product,
+                      author,
+                      rating: txt.includes('★★★★★')
+                        ? '★★★★★'
+                        : '',
+                      message,
                       url: location.href
                     });
-                    if (out.length >= limit) break;
+
+                    if (out.length >= limit)
+                      break;
                   }
+
                   return out;
                 }
                 """,
                 limit,
             )
+
+            print("CREMA_RAW_COUNT", len(reviews or []))
+
             browser.close()
 
         posts: List[BoardPost] = []
+
         for idx, r in enumerate(reviews or []):
+
             product = _norm_text(str(r.get("product", "")))
             author = _norm_text(str(r.get("author", "")))
             rating = _norm_text(str(r.get("rating", "")))
             message = _norm_text(str(r.get("message", "")))
+
             if not message:
                 continue
+
             key = _make_key(product, author, message)
+
             posts.append(
                 BoardPost(
                     board_name="크리마후기",
@@ -162,12 +219,16 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
                     board_no="crema",
                     post_no=0,
                     date_text=rating,
-                    # Put CREMA reviews above old numeric Cafe24 board posts in debug logs.
                     sort_value=9_000_000 - idx,
                 )
             )
+
+        print("CREMA_FETCHED", len(posts))
+
         return posts
+
     except Exception as e:
         print(f"CREMA_ERROR_TYPE {type(e).__name__}")
-        print(f"CREMA_ERROR_MESSAGE {str(e)[:500]}")
+        print(f"CREMA_ERROR_MESSAGE {str(e)[:1000]}")
         return _error_post(review_url, e)
+```
