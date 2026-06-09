@@ -13,7 +13,10 @@ def get_current_posts() -> List[BoardPost]:
     # CREMA reviews are rendered by JavaScript, so they are collected separately.
     crema_url = get_crema_review_url()
     if crema_url:
-        posts.extend(fetch_crema_reviews(crema_url, limit=10))
+        crema_posts = fetch_crema_reviews(crema_url, limit=12)
+        print(f"CREMA_URL {crema_url}")
+        print(f"CREMA_FETCHED {len(crema_posts)}")
+        posts.extend(crema_posts)
 
     posts.sort(key=lambda p: p.sort_value, reverse=True)
     return posts
@@ -98,7 +101,11 @@ def main():
         f"new_count={result['new_count']}, total={result['total']}"
     )
     print("CURRENT POSTS")
-    for p in result.get("posts", [])[:20]:
+    counts = {}
+    for p in result.get("posts", []):
+        counts[p.board_name] = counts.get(p.board_name, 0) + 1
+    print(f"BOARD_COUNTS {counts}")
+    for p in result.get("posts", [])[:30]:
         print(f"POST {p.sort_value} {p.board_name} {p.post_id} {p.date_text} {p.title} {p.url}")
     for p in result.get("new_posts", []):
         print(f"NEW {p.board_name} {p.post_id} {p.title} {p.url}")

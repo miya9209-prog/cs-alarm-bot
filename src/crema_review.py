@@ -60,9 +60,16 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
                 ),
                 locale="ko-KR",
             )
-            page.goto(review_url, wait_until="networkidle", timeout=60000)
-            # Review text nodes observed on misharp CREMA widget.
-            page.wait_for_selector(".AppReviewInfoSectionListV3__message", timeout=30000)
+            page.goto(review_url, wait_until="domcontentloaded", timeout=60000)
+            # CREMA renders after JS and often after the review area is reached.
+            # Scroll several times so the widget/list is actually mounted.
+            page.wait_for_timeout(3000)
+            for y in [800, 1600, 2400, 3200, 4200, 5200]:
+                page.evaluate("window.scrollTo(0, arguments[0])", y)
+                page.wait_for_timeout(1200)
+                if page.locator(".AppReviewInfoSectionListV3__message").count() > 0:
+                    break
+            page.wait_for_selector(".AppReviewInfoSectionListV3__message", timeout=45000)
 
             reviews = page.evaluate(
                 """
@@ -89,7 +96,7 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
                     for (const s of selectors) {
                       const el = card && card.querySelector(s);
                       const t = text(el);
-                      if (t) return t.replace(/리뷰\s*\d+.*$/, '').trim();
+                      if (t) return t.replace(/리뷰\s*\d+.*$/, '').replace(/NEW$/, '').trim();
                     }
                     return '';
                   }
@@ -155,7 +162,8 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
                     board_no="crema",
                     post_no=0,
                     date_text=rating,
-                    sort_value=10_000 - idx,
+                    # Put CREMA reviews above old numeric Cafe24 board posts in debug logs.
+                    sort_value=9_000_000 - idx,
                 )
             )
         return posts

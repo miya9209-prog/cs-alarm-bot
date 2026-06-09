@@ -72,3 +72,29 @@ python -m playwright install --with-deps chromium
 ## 주의
 - 크리마 화면 구조가 바뀌면 CSS 선택자를 조정해야 할 수 있습니다.
 - 스마트스토어 문의 알림은 이번 ZIP에 포함하지 않았습니다. 이번 버전은 크리마 후기 알림만 추가한 안정화 버전입니다.
+
+
+## 크리마 후기 알림 v2 중요 설정
+
+`BOARD_URLS`에는 상품문의 게시판만 넣으세요. 리뷰/포토후기 URL은 넣지 않습니다.
+
+권장 `BOARD_URLS`:
+
+```text
+https://www.misharp.co.kr/board/product/list.html?board_no=6
+```
+
+크리마 후기는 별도 Secret에 넣습니다.
+
+```text
+CREMA_REVIEW_URL=https://misharp.co.kr/board/review/photo.html?board_no=4
+```
+
+Actions 로그에서 아래 두 줄이 보여야 정상입니다.
+
+```text
+CREMA_URL https://misharp.co.kr/board/review/photo.html?board_no=4
+CREMA_FETCHED 1 이상
+```
+
+만약 `POST ... 포토후기 ... 606983`처럼 오래된 카페24 포토후기만 보이면, `BOARD_URLS`에 리뷰 URL이 섞여 있는 것입니다.

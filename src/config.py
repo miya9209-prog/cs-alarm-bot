@@ -28,7 +28,22 @@ def parse_board_urls(raw: str) -> List[str]:
 
 
 def get_board_urls() -> List[str]:
-    return parse_board_urls(get_secret("BOARD_URLS"))
+    """Return only Cafe24 CS board URLs.
+
+Do not put the review/photo URL here. CREMA reviews are JavaScript-rendered
+and must be monitored through CREMA_REVIEW_URL. If a review URL is
+accidentally left in BOARD_URLS, it is ignored here to prevent old Cafe24
+review-board posts from being mixed into the current CREMA review feed.
+"""
+    urls = parse_board_urls(get_secret("BOARD_URLS"))
+    filtered = []
+    for url in urls:
+        low = url.lower()
+        if "board/review" in low or "board_no=4" in low:
+            print(f"SKIP_REVIEW_URL_IN_BOARD_URLS {url}")
+            continue
+        filtered.append(url)
+    return filtered
 
 
 def get_telegram_token() -> str:
