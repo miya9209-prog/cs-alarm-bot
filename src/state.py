@@ -24,9 +24,13 @@ def save_seen(keys: Iterable[str]) -> None:
     seen = set()
     for key in keys:
         if key and key not in seen:
-            unique.append(key)
-            seen.add(key)
-    STATE_PATH.write_text(json.dumps({"seen": unique}, ensure_ascii=False, indent=2), encoding="utf-8")
+            unique.append(str(key))
+            seen.add(str(key))
+
+    STATE_PATH.write_text(
+        json.dumps({"seen": unique}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 def reset_seen() -> None:
