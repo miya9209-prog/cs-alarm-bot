@@ -1,4 +1,3 @@
-```python
 import hashlib
 import re
 from typing import List
@@ -67,7 +66,6 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
             )
 
             page.goto(review_url, wait_until="networkidle", timeout=90000)
-
             page.wait_for_timeout(8000)
 
             for y in [500, 1000, 1600, 2200, 3000, 4000, 5200, 6500, 8000]:
@@ -75,11 +73,7 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
                 page.wait_for_timeout(1500)
 
             body_text = page.locator("body").inner_text(timeout=30000)
-
-            print(
-                "CREMA_BODY_TEXT_SAMPLE",
-                body_text[:1000].replace("\n", " / ")
-            )
+            print("CREMA_BODY_TEXT_SAMPLE", body_text[:1000].replace("\n", " / "))
 
             reviews = page.evaluate(
                 """
@@ -88,34 +82,21 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
                     return (t || '').replace(/\\s+/g, ' ').trim();
                   }
 
-                  const rows = Array.from(
-                    document.querySelectorAll('div, li, article, section')
-                  );
-
+                  const rows = Array.from(document.querySelectorAll('div, li, article, section'));
                   const out = [];
                   const seen = new Set();
 
                   for (const row of rows) {
-
                     const txt = clean(row.innerText);
-
                     if (!txt) continue;
 
                     const hasReviewWord = txt.includes('리뷰');
                     const hasReport = txt.includes('신고 및 차단');
-                    const hasStar =
-                      txt.includes('★★★★★') ||
-                      txt.includes('★★★★') ||
-                      txt.includes('별점');
+                    const hasStar = txt.includes('★★★★★') || txt.includes('★★★★') || txt.includes('별점');
+                    const hasOption = txt.includes('상품 옵션');
 
-                    const hasOption =
-                      txt.includes('상품 옵션');
-
-                    if (!(hasReviewWord || hasReport || hasStar || hasOption))
-                      continue;
-
-                    if (txt.length < 15 || txt.length > 800)
-                      continue;
+                    if (!(hasReviewWord || hasReport || hasStar || hasOption)) continue;
+                    if (txt.length < 15 || txt.length > 800) continue;
 
                     let product = '';
                     let author = '';
@@ -128,28 +109,17 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
 
                     for (const line of lines) {
                       if (!product && line.includes('리뷰')) {
-                        product = line
-                          .replace(/리뷰\\s*\\d+.*/, '')
-                          .trim();
+                        product = line.replace(/리뷰\\s*\\d+.*/, '').trim();
                       }
                     }
 
                     for (const line of lines) {
-                      if (
-                        !author &&
-                        /^[가-힣A-Za-z0-9*]{2,12}$/.test(line) &&
-                        !line.includes('리뷰')
-                      ) {
+                      if (!author && /^[가-힣A-Za-z0-9*]{2,12}$/.test(line) && !line.includes('리뷰')) {
                         author = line;
                       }
                     }
 
-                    const ignore = [
-                      'NEW',
-                      '신고 및 차단',
-                      '댓글',
-                      '리뷰 더보기',
-                    ];
+                    const ignore = ['NEW', '신고 및 차단', '댓글', '리뷰 더보기'];
 
                     const candidates = lines.filter(line =>
                       line.length >= 8 &&
@@ -160,11 +130,9 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
                       !line.includes('키 ')
                     );
 
-                    message =
-                      candidates[candidates.length - 1] || '';
+                    message = candidates[candidates.length - 1] || '';
 
-                    const uniq =
-                      clean(product + '|' + author + '|' + message);
+                    const uniq = clean(product + '|' + author + '|' + message);
 
                     if (!message) continue;
                     if (seen.has(uniq)) continue;
@@ -174,15 +142,12 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
                     out.push({
                       product,
                       author,
-                      rating: txt.includes('★★★★★')
-                        ? '★★★★★'
-                        : '',
+                      rating: txt.includes('★★★★★') ? '★★★★★' : '',
                       message,
                       url: location.href
                     });
 
-                    if (out.length >= limit)
-                      break;
+                    if (out.length >= limit) break;
                   }
 
                   return out;
@@ -192,13 +157,11 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
             )
 
             print("CREMA_RAW_COUNT", len(reviews or []))
-
             browser.close()
 
         posts: List[BoardPost] = []
 
         for idx, r in enumerate(reviews or []):
-
             product = _norm_text(str(r.get("product", "")))
             author = _norm_text(str(r.get("author", "")))
             rating = _norm_text(str(r.get("rating", "")))
@@ -224,11 +187,9 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
             )
 
         print("CREMA_FETCHED", len(posts))
-
         return posts
 
     except Exception as e:
         print(f"CREMA_ERROR_TYPE {type(e).__name__}")
         print(f"CREMA_ERROR_MESSAGE {str(e)[:1000]}")
         return _error_post(review_url, e)
-```
