@@ -29,7 +29,7 @@ def render_posts(posts):
     for p in posts:
         st.markdown(f"**[{p.board_name}] {p.title}**")
         st.write(p.url)
-        st.caption(f"ID: {getattr(p, 'post_id', '')}")
+        st.caption(f"작성일: {getattr(p, 'date_text', '') or '확인불가'} / ID: {getattr(p, 'post_id', '')}")
         st.divider()
 
 
