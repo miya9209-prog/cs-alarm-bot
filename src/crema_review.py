@@ -65,7 +65,7 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
             # Scroll several times so the widget/list is actually mounted.
             page.wait_for_timeout(3000)
             for y in [800, 1600, 2400, 3200, 4200, 5200]:
-                page.evaluate("window.scrollTo(0, arguments[0])", y)
+                page.evaluate("(y) => window.scrollTo(0, y)", y)
                 page.wait_for_timeout(1200)
                 if page.locator(".AppReviewInfoSectionListV3__message").count() > 0:
                     break
@@ -168,4 +168,6 @@ def fetch_crema_reviews(review_url: str, limit: int = 10) -> List[BoardPost]:
             )
         return posts
     except Exception as e:
+        print(f"CREMA_ERROR_TYPE {type(e).__name__}")
+        print(f"CREMA_ERROR_MESSAGE {str(e)[:500]}")
         return _error_post(review_url, e)

@@ -98,3 +98,9 @@ CREMA_FETCHED 1 이상
 ```
 
 만약 `POST ... 포토후기 ... 606983`처럼 오래된 카페24 포토후기만 보이면, `BOARD_URLS`에 리뷰 URL이 섞여 있는 것입니다.
+
+
+## v3 수정 사항
+- Playwright scroll 실행 오류를 수정했습니다.
+- 크리마 오류 발생 시 Actions 로그에 `CREMA_ERROR_TYPE`, `CREMA_ERROR_MESSAGE`가 출력됩니다.
+- `BOARD_URLS`에는 상품문의 URL만 넣는 것을 권장합니다.
