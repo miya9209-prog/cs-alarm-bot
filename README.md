@@ -1,106 +1,60 @@
-# 미샵 CS 게시판 새글 알림봇 v12 - 크리마 후기 알림 추가
+# 미샵 CS 알림봇
 
-## 이번 버전에서 추가된 기능
-- 기존 상품문의 게시판 알림은 그대로 유지합니다.
-- 크리마 후기 페이지는 JavaScript 위젯으로 렌더링되므로 Playwright headless Chromium으로 화면 렌더링 후 후기 내용을 감지합니다.
-- 신규 후기 감지 시 텔레그램으로 `미샵 새 후기 알림`을 발송합니다.
-- 첫 실행 또는 state.json 초기화 후에는 현재 보이는 글/후기를 기준값으로 저장하고 알림을 보내지 않습니다.
+미샵 Cafe24 상품문의 게시판과 네이버 스마트스토어 공개 Q&A 페이지를 확인해 새 문의가 생기면 텔레그램으로 알림을 보내는 봇입니다.
+
+## 현재 포함 기능
+
+- Cafe24 상품문의 게시판 새글 알림
+- 네이버 스마트스토어 공개 Q&A 새 문의 알림
+- `state.json` 기반 중복 알림 방지
+- GitHub Actions 실행 지원
 
 ## GitHub Secrets
-기존 Secret은 그대로 유지합니다.
 
 필수:
+
 ```text
 TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID
 BOARD_URLS
 ```
 
-크리마 후기용 추가 Secret:
-```text
-CREMA_REVIEW_URL
-```
-
-값:
-```text
-https://misharp.co.kr/board/review/photo.html?board_no=4
-```
-
-`CREMA_REVIEW_URL`을 만들지 않아도 위 URL을 기본값으로 사용하지만, GitHub Secrets에 넣어두는 것을 권장합니다.
-
-## BOARD_URLS 예시
-상품문의는 기존처럼 유지하세요. 크리마 후기는 `CREMA_REVIEW_URL`에서 별도 감지하므로 `BOARD_URLS`에는 상품문의만 두는 것을 권장합니다.
+선택:
 
 ```text
-https://misharp.co.kr/board/product/list.html?board_no=6
+SMARTSTORE_QNA_URL
 ```
 
-기존처럼 여러 줄 입력도 가능합니다.
+`SMARTSTORE_QNA_URL`을 만들지 않으면 기본값으로 아래 주소를 사용합니다.
 
 ```text
-https://misharp.co.kr/board/product/list.html?board_no=6
-https://misharp.co.kr/board/gallery/list.html?board_no=39&category_no=1
+https://smartstore.naver.com/misharp2006/qna
 ```
 
-## GitHub Actions 변경사항
-워크플로우에서 아래 명령이 추가되었습니다.
+## BOARD_URLS 값
 
-```bash
-python -m playwright install --with-deps chromium
-```
-
-크리마 후기는 브라우저에서 렌더링된 HTML을 읽어야 하므로 필요합니다.
-
-## 테스트 순서
-1. 수정된 ZIP을 GitHub 레포에 업로드/커밋합니다.
-2. GitHub > Settings > Secrets and variables > Actions에서 `CREMA_REVIEW_URL`을 추가합니다.
-3. Actions > Board Monitor > Run workflow를 1회 실행합니다.
-4. 첫 실행은 기준값 저장용입니다. 기존 후기는 알림이 가지 않는 것이 정상입니다.
-5. 이후 새 후기가 올라오면 다음 실행부터 텔레그램 알림이 발송됩니다.
-
-## 알림 예시
-```text
-🔔 미샵 새 후기 알림
-
-상품명: 여름 동행 블라우스 (2 color)
-별점: ★★★★★
-후기: 택배 오자마자 입어봤어요...
-
-링크: https://misharp.co.kr/board/review/photo.html?board_no=4
-```
-
-## 주의
-- 크리마 화면 구조가 바뀌면 CSS 선택자를 조정해야 할 수 있습니다.
-- 스마트스토어 문의 알림은 이번 ZIP에 포함하지 않았습니다. 이번 버전은 크리마 후기 알림만 추가한 안정화 버전입니다.
-
-
-## 크리마 후기 알림 v2 중요 설정
-
-`BOARD_URLS`에는 상품문의 게시판만 넣으세요. 리뷰/포토후기 URL은 넣지 않습니다.
-
-권장 `BOARD_URLS`:
+상품문의 게시판만 넣는 것을 권장합니다.
 
 ```text
 https://www.misharp.co.kr/board/product/list.html?board_no=6
 ```
 
-크리마 후기는 별도 Secret에 넣습니다.
+## 스마트스토어 알림 형식
 
 ```text
-CREMA_REVIEW_URL=https://misharp.co.kr/board/review/photo.html?board_no=4
+🔔 스마트스토어 새 문의
+
+문의일: 2026-06-10
+작성자: banj*****
+링크: https://smartstore.naver.com/misharp2006/qna
 ```
 
-Actions 로그에서 아래 두 줄이 보여야 정상입니다.
+## 첫 실행 주의
 
-```text
-CREMA_URL https://misharp.co.kr/board/review/photo.html?board_no=4
-CREMA_FETCHED 1 이상
-```
+`state.json`이 없으면 현재 보이는 글을 기준값으로 저장하고 알림을 보내지 않습니다.
 
-만약 `POST ... 포토후기 ... 606983`처럼 오래된 카페24 포토후기만 보이면, `BOARD_URLS`에 리뷰 URL이 섞여 있는 것입니다.
+스마트스토어 기능을 처음 추가한 실행에서도 현재 보이는 스마트스토어 문의는 기준값으로만 저장합니다. 이후 새 문의부터 알림이 발송됩니다.
 
+## 크리마 후기
 
-## v3 수정 사항
-- Playwright scroll 실행 오류를 수정했습니다.
-- 크리마 오류 발생 시 Actions 로그에 `CREMA_ERROR_TYPE`, `CREMA_ERROR_MESSAGE`가 출력됩니다.
-- `BOARD_URLS`에는 상품문의 URL만 넣는 것을 권장합니다.
+크리마 후기 알림은 GitHub Actions 환경에서 안정적으로 렌더링되지 않아 제거했습니다.

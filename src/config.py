@@ -39,6 +39,10 @@ def get_board_urls() -> List[str]:
     return filtered
 
 
+def get_smartstore_qna_url() -> str:
+    return get_secret("SMARTSTORE_QNA_URL", "https://smartstore.naver.com/misharp2006/qna")
+
+
 def get_telegram_token() -> str:
     return get_secret("TELEGRAM_BOT_TOKEN")
 
