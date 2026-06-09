@@ -1,23 +1,13 @@
 from typing import Dict, List
 
 from src.cafe24_board import BoardPost, fetch_all_boards
-from src.config import get_board_urls, get_crema_review_url, get_telegram_chat_id, get_telegram_token
-from src.crema_review import fetch_crema_reviews
+from src.config import get_board_urls, get_telegram_chat_id, get_telegram_token
 from src.state import load_seen, reset_seen, save_seen, state_exists
 from src.telegram_alert import send_telegram_message
 
 
 def get_current_posts() -> List[BoardPost]:
     posts = fetch_all_boards(get_board_urls(), limit_per_board=30)
-
-    # CREMA reviews are rendered by JavaScript, so they are collected separately.
-    crema_url = get_crema_review_url()
-    if crema_url:
-        crema_posts = fetch_crema_reviews(crema_url, limit=12)
-        print(f"CREMA_URL {crema_url}")
-        print(f"CREMA_FETCHED {len(crema_posts)}")
-        posts.extend(crema_posts)
-
     posts.sort(key=lambda p: p.sort_value, reverse=True)
     return posts
 
@@ -39,12 +29,6 @@ def reset_state() -> Dict[str, object]:
 
 
 def _message_for_post(p: BoardPost) -> str:
-    if p.board_name == "크리마후기":
-        return (
-            "🔔 미샵 새 후기 알림\n"
-            f"상품명: {p.title or '상품명 확인불가'}\n"
-            f"작성자: {p.date_text or '작성자 확인불가'}"
-        )
     return (
         "🔔 미샵 CS 새글 알림\n\n"
         f"게시판: {p.board_name}\n"
@@ -73,19 +57,12 @@ def check_new_posts(send_alert: bool = True, initialize_if_missing: bool = True)
     seen = set(load_seen())
     new_posts = [p for p in valid if p.key not in seen]
 
-    # 크리마 기능을 처음 적용한 실행에서는 현재 보이는 기존 후기들을 기준값으로만 저장합니다.
-    # 이렇게 해야 예전 후기 알림이 한꺼번에 몰려오지 않습니다.
-    has_crema_seen = any(str(k).startswith("crema:") for k in seen)
-    if not has_crema_seen:
-        new_posts = [p for p in new_posts if p.board_name != "크리마후기"]
-
     if send_alert and new_posts:
         token = get_telegram_token()
         chat_id = get_telegram_chat_id()
         for p in reversed(new_posts):
             send_telegram_message(token, chat_id, _message_for_post(p))
 
-    # 기존 seen도 함께 보존합니다. 크리마/네트워크 일시 실패 때 기존 기준값이 사라지는 것을 방지합니다.
     save_seen(list(seen) + [p.key for p in valid])
     return {
         "new_count": len(new_posts),
