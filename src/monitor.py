@@ -2,7 +2,7 @@ from typing import Dict, List
 
 from src.cafe24_board import BoardPost, fetch_all_boards
 from src.config import get_board_urls, get_telegram_chat_id, get_telegram_token
-from src.state import load_seen, save_seen, reset_seen, state_exists
+from src.state import load_seen, reset_seen, save_seen, state_exists
 from src.telegram_alert import send_telegram_message
 
 
@@ -30,7 +30,6 @@ def check_new_posts(send_alert: bool = True, initialize_if_missing: bool = True)
     posts = get_current_posts()
     valid = _valid_posts(posts)
 
-    # GitHub Actions 첫 실행 때는 과거 글 30개를 모두 알림 보내지 않고 기준값만 생성
     if initialize_if_missing and not state_exists():
         save_seen([p.key for p in valid])
         return {
@@ -39,6 +38,7 @@ def check_new_posts(send_alert: bool = True, initialize_if_missing: bool = True)
             "new_posts": [],
             "posts": posts,
             "initialized": True,
+            "message": "state.json이 없어 현재 글을 기준값으로 저장했습니다. 다음 실행부터 새글 알림이 발송됩니다.",
         }
 
     seen = set(load_seen())
@@ -47,15 +47,13 @@ def check_new_posts(send_alert: bool = True, initialize_if_missing: bool = True)
     if send_alert and new_posts:
         token = get_telegram_token()
         chat_id = get_telegram_chat_id()
-        # 오래된 새글부터 순서대로 발송
         for p in reversed(new_posts):
             send_telegram_message(
                 token,
                 chat_id,
-                f"🔔 미샵 CS 새글 알림\n\n게시판: {p.board_name}\n제목: {p.title}\n링크: {p.url}",
+                f"🔔 미샵 CS 새글 알림\n\n게시판: {p.board_name}\n제목: {p.title}\n작성일: {p.date_text or '확인불가'}\nID: {p.post_id}\n링크: {p.url}",
             )
 
-    # 이번에 확인한 최신 30개를 기준값으로 저장
     save_seen([p.key for p in valid])
     return {
         "new_count": len(new_posts),
@@ -72,6 +70,9 @@ def main():
         f"initialized={result.get('initialized')}, "
         f"new_count={result['new_count']}, total={result['total']}"
     )
+    print("CURRENT POSTS")
+    for p in result.get("posts", [])[:15]:
+        print(f"POST {p.sort_value} {p.board_name} {p.post_id} {p.date_text} {p.title} {p.url}")
     for p in result.get("new_posts", []):
         print(f"NEW {p.board_name} {p.post_id} {p.title} {p.url}")
 

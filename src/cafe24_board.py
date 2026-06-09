@@ -39,6 +39,7 @@ def _board_info(board_url: str) -> tuple[str, str]:
 
 
 def _make_key(board_no: str, post_no: str, url: str) -> str:
+    # Cafe24 no 값은 게시글 고유번호로 안정적입니다.
     raw = f"{board_no}|{post_no or url}"
     return hashlib.md5(raw.encode("utf-8")).hexdigest()
 
@@ -48,14 +49,14 @@ def _post_id_from_url(url: str) -> Optional[tuple[str, str]]:
     path = parsed.path
     qs = parse_qs(parsed.query)
 
-    # 후기/포토후기: /board/review/read_photo.html?board_no=4&no=606983
+    # 후기/포토후기: /board/review/read_photo.html?no=606983&board_no=4
     if "read_photo.html" in path or "read.html" in path:
         board_no = (qs.get("board_no") or [""])[0]
         post_no = (qs.get("no") or [""])[0]
         if board_no and post_no:
             return board_no, post_no
 
-    # 상품문의/이벤트: /article/상품문의/6/606987/ , /article/이벤트/39/606730/categoryno/1/
+    # 상품문의/이벤트: /article/상품문의/6/606987/ , /article/이벤트/39/601108/categoryno/1/
     m = re.search(r"/article/[^/]+/(\d+)/(\d+)(?:/|$)", path)
     if m:
         return m.group(1), m.group(2)
@@ -64,7 +65,6 @@ def _post_id_from_url(url: str) -> Optional[tuple[str, str]]:
 
 
 def _is_noise_url(url: str) -> bool:
-    # 상품/카테고리/회원/검색 링크는 게시글이 아니므로 제외
     bad = [
         "/product/list.html",
         "/product/search.html",
@@ -78,7 +78,6 @@ def _is_noise_url(url: str) -> bool:
     ]
     parsed = urlparse(url)
     path = parsed.path
-    # article 게시글의 categoryno는 허용
     if "/article/" in path and re.search(r"/article/[^/]+/\d+/\d+", path):
         return False
     return any(x in url for x in bad)
@@ -87,23 +86,20 @@ def _is_noise_url(url: str) -> bool:
 def _is_notice_or_reply(title: str, full_url: str, row_text: str) -> bool:
     t = _norm_text(title)
     r = _norm_text(row_text)
-    if "공지" in t or r.startswith("공지 ") or " 공지 " in r[:20]:
+    if "공지" in t or r.startswith("공지 ") or " 공지 " in r[:30]:
         return True
     if "답변드려요" in t:
         return True
-    if t in {"글쓰기", "목록", "수정", "삭제", "답변쓰기", "전체보기", "포토", "리스트"}:
+    if t in {"글쓰기", "목록", "수정", "삭제", "답변쓰기", "전체보기", "포토", "리스트", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}:
         return True
     return False
 
 
 def _candidate_container(a: Tag) -> Tag:
-    # 게시판 테이블은 tr 단위, 포토후기는 li/div 단위인 경우가 많다.
     for name in ["tr", "li", "div"]:
         parent = a.find_parent(name)
         if parent is not None:
-            txt = parent.get_text(" ", strip=True)
-            if len(txt) >= len(a.get_text(" ", strip=True)):
-                return parent
+            return parent
     return a
 
 
@@ -120,42 +116,37 @@ def _extract_date_from_text(text: str) -> str:
 
 
 def _date_near_anchor(a: Tag) -> str:
-    # 1) 같은 행/카드에서 날짜 찾기
-    node: Optional[Tag] = a
-    for _ in range(5):
-        if node is None:
-            break
-        text = node.get_text(" ", strip=True)
-        date_text = _extract_date_from_text(text)
-        if date_text:
-            return date_text
-        node = node.parent if isinstance(node.parent, Tag) else None
-    # 2) 다음 형제 주변에서 날짜 찾기
-    for sib in a.find_all_next(string=True, limit=12):
+    container = _candidate_container(a)
+    date_text = _extract_date_from_text(container.get_text(" ", strip=True))
+    if date_text:
+        return date_text
+    # 근처 텍스트에서 보조 탐색
+    for sib in a.find_all_next(string=True, limit=16):
         date_text = _extract_date_from_text(str(sib))
         if date_text:
             return date_text
     return ""
 
 
-def _sort_value(date_text: str, post_no: str) -> int:
-    # 날짜가 있으면 날짜 우선 + 글번호. 날짜가 없으면 글번호만 사용.
+def _display_sort_value(date_text: str, post_no: str) -> int:
+    # 미샵 게시판은 board_no가 달라도 실제 글번호(no)가 전역 증가값에 가깝습니다.
+    # 그래서 전체 최신순 정렬은 날짜보다 post_no를 우선 사용합니다.
+    # 이벤트 글처럼 날짜가 있어도 오래된 글번호면 아래로 내려갑니다.
     try:
-        post_int = int(post_no)
+        return int(post_no)
     except Exception:
-        post_int = 0
+        pass
     if date_text:
         try:
             dt = datetime.strptime(date_text, "%Y-%m-%d")
-            return int(dt.strftime("%Y%m%d")) * 10_000_000 + post_int
+            return int(dt.strftime("%Y%m%d"))
         except Exception:
-            pass
-    return post_int
+            return 0
+    return 0
 
 
 def _clean_title(title: str) -> str:
     t = _norm_text(title)
-    # 카페24 비밀글/NEW 이미지 alt가 제목에 붙는 경우 정리
     t = t.replace("비밀글", "").replace("NEW", "").replace("HIT", "")
     t = re.sub(r"\s+", " ", t).strip()
     return t
@@ -176,8 +167,7 @@ def fetch_board_posts(board_url: str, limit: int = 30) -> List[BoardPost]:
     seen_ids: set[str] = set()
 
     for a in soup.find_all("a", href=True):
-        raw_title = a.get_text(" ", strip=True)
-        title = _clean_title(raw_title)
+        title = _clean_title(a.get_text(" ", strip=True))
         if not title or len(title) < 2:
             continue
 
@@ -205,6 +195,7 @@ def fetch_board_posts(board_url: str, limit: int = 30) -> List[BoardPost]:
 
         date_text = _date_near_anchor(a)
         key = _make_key(board_no, post_no, full_url)
+        sort_value = _display_sort_value(date_text, post_no)
         posts.append(
             BoardPost(
                 board_name=board_name,
@@ -215,13 +206,12 @@ def fetch_board_posts(board_url: str, limit: int = 30) -> List[BoardPost]:
                 board_no=board_no,
                 post_no=int(post_no) if str(post_no).isdigit() else 0,
                 date_text=date_text,
-                sort_value=_sort_value(date_text, post_no),
+                sort_value=sort_value,
             )
         )
         if len(posts) >= limit:
             break
 
-    # 각 게시판 내부도 최신순으로 정렬
     posts.sort(key=lambda p: p.sort_value, reverse=True)
     return posts
 
@@ -245,6 +235,5 @@ def fetch_all_boards(board_urls: Iterable[str], limit_per_board: int = 30) -> Li
                     sort_value=0,
                 )
             )
-    # 전체 게시판을 한꺼번에 최신순 정렬
     all_posts.sort(key=lambda p: p.sort_value, reverse=True)
     return all_posts
