@@ -10,7 +10,7 @@ def send_telegram_message(token: str, chat_id: str, message: str) -> bool:
         json={
             "chat_id": chat_id,
             "text": message,
-            "disable_web_page_preview": False,
+            "disable_web_page_preview": True,
         },
         timeout=20,
     )

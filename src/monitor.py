@@ -40,14 +40,10 @@ def reset_state() -> Dict[str, object]:
 
 def _message_for_post(p: BoardPost) -> str:
     if p.board_name == "크리마후기":
-        product = p.title.split(" / ", 1)[0]
-        review = p.title.split(" / ", 1)[1] if " / " in p.title else p.title
         return (
-            "🔔 미샵 새 후기 알림\n\n"
-            f"상품명: {product}\n"
-            f"별점: {p.date_text or '확인불가'}\n"
-            f"후기: {review}\n\n"
-            f"링크: {p.url}"
+            "🔔 미샵 새 후기 알림\n"
+            f"상품명: {p.title or '상품명 확인불가'}\n"
+            f"작성자: {p.date_text or '작성자 확인불가'}"
         )
     return (
         "🔔 미샵 CS 새글 알림\n\n"
