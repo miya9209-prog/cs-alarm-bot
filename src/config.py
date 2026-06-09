@@ -3,11 +3,9 @@ from typing import List
 
 
 def get_secret(name: str, default: str = "") -> str:
-    """Read a value from environment variables first, then Streamlit secrets."""
     value = os.getenv(name)
     if value:
         return value.strip()
-
     try:
         import streamlit as st  # type: ignore
         value = st.secrets.get(name, default)
@@ -21,7 +19,6 @@ def get_secret(name: str, default: str = "") -> str:
 def parse_board_urls(raw: str) -> List[str]:
     if not raw:
         return []
-
     urls: List[str] = []
     for line in raw.replace(",", "\n").splitlines():
         line = line.strip()
@@ -40,9 +37,3 @@ def get_telegram_token() -> str:
 
 def get_telegram_chat_id() -> str:
     return get_secret("TELEGRAM_CHAT_ID")
-
-
-# Backward-compatible aliases
-board_urls = get_board_urls
-telegram_bot_token = get_telegram_token
-telegram_chat_id = get_telegram_chat_id
