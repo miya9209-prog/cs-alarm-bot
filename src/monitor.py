@@ -1,17 +1,26 @@
 from typing import Dict, List
 
 from src.cafe24_board import BoardPost, fetch_all_boards
-from src.config import get_board_urls, get_telegram_chat_id, get_telegram_token
+from src.config import get_board_urls, get_crema_review_url, get_telegram_chat_id, get_telegram_token
+from src.crema_review import fetch_crema_reviews
 from src.state import load_seen, reset_seen, save_seen, state_exists
 from src.telegram_alert import send_telegram_message
 
 
 def get_current_posts() -> List[BoardPost]:
-    return fetch_all_boards(get_board_urls(), limit_per_board=30)
+    posts = fetch_all_boards(get_board_urls(), limit_per_board=30)
+
+    # CREMA reviews are rendered by JavaScript, so they are collected separately.
+    crema_url = get_crema_review_url()
+    if crema_url:
+        posts.extend(fetch_crema_reviews(crema_url, limit=10))
+
+    posts.sort(key=lambda p: p.sort_value, reverse=True)
+    return posts
 
 
 def _valid_posts(posts: List[BoardPost]) -> List[BoardPost]:
-    return [p for p in posts if not p.title.startswith("[오류]")]
+    return [p for p in posts if not p.title.startswith("[오류]") and p.key]
 
 
 def initialize_current_posts() -> Dict[str, object]:
@@ -24,6 +33,27 @@ def initialize_current_posts() -> Dict[str, object]:
 def reset_state() -> Dict[str, object]:
     reset_seen()
     return {"ok": True}
+
+
+def _message_for_post(p: BoardPost) -> str:
+    if p.board_name == "크리마후기":
+        product = p.title.split(" / ", 1)[0]
+        review = p.title.split(" / ", 1)[1] if " / " in p.title else p.title
+        return (
+            "🔔 미샵 새 후기 알림\n\n"
+            f"상품명: {product}\n"
+            f"별점: {p.date_text or '확인불가'}\n"
+            f"후기: {review}\n\n"
+            f"링크: {p.url}"
+        )
+    return (
+        "🔔 미샵 CS 새글 알림\n\n"
+        f"게시판: {p.board_name}\n"
+        f"제목: {p.title}\n"
+        f"작성일: {p.date_text or '확인불가'}\n"
+        f"ID: {p.post_id}\n"
+        f"링크: {p.url}"
+    )
 
 
 def check_new_posts(send_alert: bool = True, initialize_if_missing: bool = True) -> Dict[str, object]:
@@ -48,13 +78,10 @@ def check_new_posts(send_alert: bool = True, initialize_if_missing: bool = True)
         token = get_telegram_token()
         chat_id = get_telegram_chat_id()
         for p in reversed(new_posts):
-            send_telegram_message(
-                token,
-                chat_id,
-                f"🔔 미샵 CS 새글 알림\n\n게시판: {p.board_name}\n제목: {p.title}\n작성일: {p.date_text or '확인불가'}\nID: {p.post_id}\n링크: {p.url}",
-            )
+            send_telegram_message(token, chat_id, _message_for_post(p))
 
-    save_seen([p.key for p in valid])
+    # 기존 seen도 함께 보존합니다. 크리마/네트워크 일시 실패 때 기존 기준값이 사라지는 것을 방지합니다.
+    save_seen(list(seen) + [p.key for p in valid])
     return {
         "new_count": len(new_posts),
         "total": len(posts),
@@ -71,7 +98,7 @@ def main():
         f"new_count={result['new_count']}, total={result['total']}"
     )
     print("CURRENT POSTS")
-    for p in result.get("posts", [])[:15]:
+    for p in result.get("posts", [])[:20]:
         print(f"POST {p.sort_value} {p.board_name} {p.post_id} {p.date_text} {p.title} {p.url}")
     for p in result.get("new_posts", []):
         print(f"NEW {p.board_name} {p.post_id} {p.title} {p.url}")

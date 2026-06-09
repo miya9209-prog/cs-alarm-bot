@@ -37,3 +37,7 @@ def get_telegram_token() -> str:
 
 def get_telegram_chat_id() -> str:
     return get_secret("TELEGRAM_CHAT_ID")
+
+
+def get_crema_review_url() -> str:
+    return get_secret("CREMA_REVIEW_URL", "https://misharp.co.kr/board/review/photo.html?board_no=4")
