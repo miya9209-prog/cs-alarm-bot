@@ -73,6 +73,12 @@ def check_new_posts(send_alert: bool = True, initialize_if_missing: bool = True)
     seen = set(load_seen())
     new_posts = [p for p in valid if p.key not in seen]
 
+    # 크리마 기능을 처음 적용한 실행에서는 현재 보이는 기존 후기들을 기준값으로만 저장합니다.
+    # 이렇게 해야 예전 후기 알림이 한꺼번에 몰려오지 않습니다.
+    has_crema_seen = any(str(k).startswith("crema:") for k in seen)
+    if not has_crema_seen:
+        new_posts = [p for p in new_posts if p.board_name != "크리마후기"]
+
     if send_alert and new_posts:
         token = get_telegram_token()
         chat_id = get_telegram_chat_id()
